@@ -3917,6 +3917,46 @@ func TestChannelRetransmissionFeeUpdate(t *testing.T) {
 	}
 }
 
+func TestChanSyncStartingState(t *testing.T) {
+	t.Parallel()
+
+	// Create a test channel which will be used for the duration of this
+	// unittest. The channel will be funded evenly with Alice having 5 BTC,
+	// and Bob having 5 BTC.
+	aliceChannel, bobChannel, cleanUp, err := CreateTestChannels()
+	if err != nil {
+		t.Fatalf("unable to create test channels: %v", err)
+	}
+	defer cleanUp()
+
+	// Next, we'll restart both parties in order to simulate a connection
+	// re-establishment.
+	aliceChannel, err = restartChannel(aliceChannel)
+	if err != nil {
+		t.Fatalf("unable to restart alice: %v", err)
+	}
+	bobChannel, err = restartChannel(bobChannel)
+	if err != nil {
+		t.Fatalf("unable to restart bob: %v", err)
+	}
+
+	// Next, we'll produce the ChanSync messages for both parties.
+	aliceChanSync, err := ChanSyncMsg(aliceChannel.channelState)
+	if err != nil {
+		t.Fatalf("unable to generate chan sync msg: %v", err)
+	}
+
+	if aliceChanSync.RemoteCommitTailHeight != 0 {
+		t.Fatalf("expected remote commit tail height of 0, is %d", aliceChanSync.RemoteCommitTailHeight)
+	}
+
+	aliceChanSync.RemoteCommitTailHeight += 1
+	_, _, _, err = bobChannel.ProcessChanSyncMsg(aliceChanSync)
+	if err != ErrInvalidLastCommitSecret {
+		t.Fatalf("expected error \"%s\" instead have: \"%v\"", ErrInvalidLastCommitSecret, err)
+	}
+}
+
 // TestChanSyncUnableToSync tests that if Alice or Bob receive an invalid
 // ChannelReestablish messages,then they reject the message and declare the
 // channel un-continuable by returning ErrCannotSyncCommitChains.
